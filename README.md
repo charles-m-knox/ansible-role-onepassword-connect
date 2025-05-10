@@ -133,7 +133,7 @@ note that root access is required for some of the steps:
 ```
 
 ```bash
-ansible-playbook site.yml --tags base,sysctl,files,directories --step
+ansible-playbook site.yml --tags onepassword-connect --step
 ```
 
 ## License
