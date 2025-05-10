@@ -136,6 +136,68 @@ note that root access is required for some of the steps:
 ansible-playbook site.yml --tags onepassword-connect --step
 ```
 
+## Appendix
+
+### How to retrieve a 1Password secret
+
+First, update your `requirements.yml`:
+
+```diff
+---
+collections:
+  - name: community.general
+  - name: ansible.posix
+  - name: community.crypto
++  - name: onepassword.connect
+```
+
+Then install it using the command shown above:
+
+```bash
+ansible-galaxy role install -f -r requirements.yml
+```
+
+This is a test snippet that shows how to retrieve a secret from 1password:
+
+```yaml
+---
+
+- name: Include vault
+  ansible.builtin.include_vars:
+    file: vars/vault.txt
+  tags:
+    - testing-onepassword
+
+- name: Test onepassword connect
+  onepassword.connect.field_info:
+    token: "{{ connect_token }}"  # this is set in your vault
+    hostname: "{{ OP_CONNECT_HOST }}"  # this can be an env var that starts with https://
+    vault: "{{ OP_VAULT_ID }}"  # right-click the vault to copy its uuid
+    field: "private key"
+    item: "some-ssh-key-called-this"
+  delegate_to: "localhost"  # just to avoid running it on different systems
+  tags:
+    - testing-onepassword
+  register: onepassword_connect_test
+
+- name: Show the value
+  ansible.builtin.debug:
+    msg: "{{ onepassword_connect_test }}"
+  tags:
+    - testing-onepassword
+```
+
+Finally, run it - your setup may or may not have extra vars in an env file:
+
+```bash
+ansible-playbook site.yml \
+  --vault-password-file .vault-passphrase \
+  --extra-vars '@.env.yml' \
+  -vv \
+  --tags testing-onepasword \
+  -l some_hostname
+```
+
 ## License
 
 MIT
