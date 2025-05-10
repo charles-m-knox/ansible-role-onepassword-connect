@@ -1,4 +1,4 @@
-# Essentials
+# 1Password Connect
 
 Ansible role that installs a 1Password Connect server.
 
