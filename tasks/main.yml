@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: MIT-0
+---
+
+# Create an ansible vault by first navigating to the vars/ directory at the root
+# of your ansible repository, then running:
+#
+# ansible-vault create vault.txt
+#
+# Then, create a file in the root of your ansible repository, and create a file
+# called .vault-password that contains the password you use for the vault.
+#
+# Finally, use the password via:
+#
+# ansible-playbook site.yml --vault-password-file .vault-password
+
+- name: Include onepassword ansible vault secrets
+  ansible.builtin.include_vars:
+    file: vars/vault.txt
+  when: onepassword_connect
+  tags:
+    - onepassword-connect
+
+# if needed:
+# - name: Debug vars
+#   ansible.builtin.debug:
+#     msg: "{{ vault_onepassword_connect_credentials_json }}"
+#   when: onepassword_connect
+#   tags:
+#     - onepassword-connect
+
+- name: Install dependencies for onepassword connect
+  ansible.builtin.package:
+    name:
+      - caddy
+      - podman
+    state: present
+  become: true
+  when: onepassword_connect
+  tags:
+    - onepassword-connect
+
+- name: Create directories for onepassword connect
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ systemd_user_containers_dir }}"
+    - "{{ onepassword_connect.service_dir }}"
+  when: onepassword_connect
+  tags:
+    - onepassword-connect
+
+- name: Render credentials template for onepassword connect
+  ansible.builtin.template:
+    src: credentials.json.j2
+    dest: "{{ onepassword_connect.service_dir }}/{{ onepassword_connect.credentials_file_name }}"
+    mode: "0600"
+  when: onepassword_connect
+  tags:
+    - onepassword-connect
+
+- name: Set podman permissions for credentials so that onepassword sync container works  # noqa no-changed-when
+  ansible.builtin.shell:
+    cmd: |
+      podman unshare chown 999:999 "{{ onepassword_connect.service_dir }}/{{ onepassword_connect.credentials_file_name }}"
+  when: onepassword_connect
+  tags:
+    - onepassword-connect
+
+- name: Create onepassword systemd quadlets
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - src: quadlets/connect.volume
+      dest: "{{ systemd_user_containers_dir }}/{{ onepassword_connect.volume_name }}.volume"
+    - src: quadlets/connect.network
+      dest: "{{ systemd_user_containers_dir }}/{{ onepassword_connect.network_name }}.network"
+    - src: quadlets/connect.container
+      dest: "{{ systemd_user_containers_dir }}/{{ onepassword_connect.connect_container.name }}.container"
+    - src: quadlets/sync.container
+      dest: "{{ systemd_user_containers_dir }}/{{ onepassword_connect.sync_container.name }}.container"
+  when: onepassword_connect
+  tags:
+    - onepassword-connect
+
+- name: Add caddy configuration for onepassword connect
+  ansible.builtin.template:
+    src: caddyfile.j2
+    dest: "{{ onepassword_connect.caddyfile.dest }}"
+    mode: "{{ onepassword_connect.caddyfile.mode }}"
+  when: onepassword_connect
+  become: "{{ onepassword_connect.caddyfile.become }}"
+  tags:
+    - onepassword-connect
+
+- name: Enable onepassword systemd quadlets
+  ansible.builtin.systemd:
+    daemon_reload: true
+    name: "{{ item }}"
+    state: started
+    enabled: true
+    scope: user
+  loop:
+    - "{{ onepassword_connect.connect_container.name }}"
+    - "{{ onepassword_connect.sync_container.name }}"
+  environment:  # required in order to operate under user scope
+    XDG_RUNTIME_DIR: "{{ ansible_env.XDG_RUNTIME_DIR }}"
+  when: onepassword_connect
+  tags:
+    - onepassword-connect
+
+- name: Reload caddy and systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+    state: reloaded
+    name: caddy
+    scope: system
+  become: true
+  when: onepassword_connect
+  tags:
+    - onepassword-connect

@@ -1,0 +1,15 @@
+[Container]
+ContainerName={{ onepassword_connect.sync_container.name }}
+Image={{ onepassword_connect.sync_container.image }}
+Network={{ onepassword_connect.network_name }}.network
+{% for port in onepassword_connect.sync_container.published_ports %}
+PublishPort={{ port }}
+{% endfor %}
+Volume={{ onepassword_connect.service_dir }}/{{ onepassword_connect.credentials_file_name }}:/home/opuser/.op/1password-credentials.json:ro,Z
+Volume={{ onepassword_connect.volume_name }}:/home/opuser/.op/data:Z
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
